@@ -2698,9 +2698,9 @@ uiContainer.innerHTML = `
   </div>
 
   <div id="controls-hint">
-    <span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> Drive &nbsp;
-    <span class="key-badge">Space</span> Drift / Brake<br>
-    <span class="key-badge">Click + Drag</span> Look around
+    <span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> Lái xe &nbsp;
+    <span class="key-badge">Space</span> Drift / Phanh<br>
+    <span class="key-badge">Click + Drag</span> Xoay camera
   </div>
 
   <div id="project-panel">
@@ -2713,7 +2713,7 @@ uiContainer.innerHTML = `
 
   <div id="minimap"><canvas id="minimap-canvas" width="140" height="140"></canvas></div>
 
-  <div id="proximity-indicator" id="proximity-text">Drive closer to explore this project</div>
+  <div id="proximity-indicator" id="proximity-text">Lái xe lại gần để khám phá dự án</div>
 
   <!-- Demo Screen Overlay (projected on building wall) -->
   <div id="demo-screen-overlay">
@@ -2738,7 +2738,7 @@ uiContainer.innerHTML = `
     </div>
   </div>
 
-  <div id="demo-hint">📺 Drive closer — demo will project on building wall</div>
+  <div id="demo-hint">📺 Lái gần hơn để xem demo — nhấn E để mở</div>
 
   <!-- Contact Card -->
   <div id="contact-card">
@@ -2773,7 +2773,7 @@ uiContainer.innerHTML = `
       </a>
     </div>
   </div>
-  <div id="contact-card-hint">👤 Drive closer to meet the developer</div>
+  <div id="contact-card-hint">👤 Lái lại gần để gặp developer</div>
 `;
 root.appendChild(uiContainer);
 
@@ -3330,7 +3330,7 @@ function checkProximity() {
         } else {
           // Show hint
           if (!demoOpen) {
-            demoHint.textContent = `📺 Drive closer — demo will project on building wall`;
+            demoHint.textContent = `📺 Lái gần hơn để xem demo — nhấn E để mở`;
             demoHint.classList.add('visible');
           }
         }
@@ -3350,7 +3350,7 @@ function checkProximity() {
       // Show proximity hint
       projectPanel.classList.remove('active');
       activeProject = null;
-      proximityIndicator.textContent = `↗ ${closest.title} — drive closer`;
+      proximityIndicator.textContent = `↗ ${closest.title} — lái xe lại gần để xem`;
       proximityIndicator.classList.add('visible');
       demoHint.classList.remove('visible');
       if (!demoOpen) demoTargetProject = null;
