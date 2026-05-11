@@ -3080,7 +3080,11 @@ const cameraLookTarget = new THREE.Vector3();
 let activeProject = null;
 let panelFadeTimer = 0;
 // Clock replacement (THREE.Clock deprecated in v0.183)
-const clock = { _prev: 0, getDelta() { const now = performance.now()/1000; const d = this._prev ? Math.min(now - this._prev, 0.05) : 0.016; this._prev = now; return d; } };
+const clock = {
+  _prev: 0, _start: performance.now()/1000,
+  getDelta()        { const now = performance.now()/1000; const d = this._prev ? Math.min(now - this._prev, 0.05) : 0.016; this._prev = now; return d; },
+  getElapsedTime()  { return performance.now()/1000 - this._start; }
+};
 
 // ============================================================
 // 🌧️ WEATHER SYSTEM
