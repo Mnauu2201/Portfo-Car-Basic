@@ -1007,123 +1007,131 @@ function createChibiTree(x, z, scale = 1) {
 
   return group;
 }
+// ============================================================
+// INSTANCED CAT NPC SYSTEM — 7 draw calls cho tất cả mèo
+// ============================================================
+const CAT_COUNT = 8; // giảm từ 30 xuống 8, nhưng render nhanh hơn nhiều
+
+// Shared geometries & materials (tái sử dụng cho tất cả instance)
+const _catBodyGeo  = new THREE.SphereGeometry(0.22, 7, 5);
+const _catHeadGeo  = new THREE.SphereGeometry(0.22, 7, 6);
+const _catEarGeo   = new THREE.ConeGeometry(0.07, 0.13, 4);
+const _catPawGeo   = new THREE.SphereGeometry(0.08, 5, 4);
+const _catTailGeo  = new THREE.CylinderGeometry(0.03, 0.015, 0.4, 5);
+const _catEyeGeo   = new THREE.SphereGeometry(0.032, 5, 5);
+const _catNoseGeo  = new THREE.SphereGeometry(0.020, 4, 4);
+
+const CAT_COLORS = [0xf5deb3, 0x999999, 0x333333, 0xff9966, 0xffffff, 0xc8a96e, 0x111111, 0xffccaa];
+
+// Tạo 1 InstancedMesh per part — mỗi mesh = 1 draw call, tất cả instances cùng lúc
+function makeInstanced(geo, mat, count) {
+  const m = new THREE.InstancedMesh(geo, mat, count);
+  m.castShadow = false; // tắt shadow cho NPC để giảm render cost
+  m.frustumCulled = false;
+  scene.add(m);
+  return m;
+}
+
+// Mỗi màu mèo cần material riêng — dùng shared array
+const _catMats = CAT_COLORS.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+const _eyeMat  = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
+const _noseMat = new THREE.MeshStandardMaterial({ color: 0xff9999, roughness: 0.5 });
+const _earMat  = new THREE.MeshStandardMaterial({ color: 0xffcccc, roughness: 0.9 });
+
+// Instanced meshes — 7 draw calls tổng
+const iBody  = makeInstanced(_catBodyGeo, _catMats[0], CAT_COUNT); // sẽ setMatrixAt per cat
+const iHead  = makeInstanced(_catHeadGeo, _catMats[0], CAT_COUNT);
+const iEarL  = makeInstanced(_catEarGeo,  _catMats[0], CAT_COUNT);
+const iEarR  = makeInstanced(_catEarGeo,  _catMats[0], CAT_COUNT);
+const iPawL  = makeInstanced(_catPawGeo,  _catMats[0], CAT_COUNT);
+const iPawR  = makeInstanced(_catPawGeo,  _catMats[0], CAT_COUNT);
+const iTail  = makeInstanced(_catTailGeo, _catMats[0], CAT_COUNT);
+// Eyes & nose share across all cats
+const iEyeL  = makeInstanced(_catEyeGeo,  _eyeMat, CAT_COUNT);
+const iEyeR  = makeInstanced(_catEyeGeo,  _eyeMat, CAT_COUNT);
+const iNose  = makeInstanced(_catNoseGeo, _noseMat, CAT_COUNT);
+
+// Per-instance color — set via instanceColor
+iBody.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAT_COUNT * 3), 3);
+iHead.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAT_COUNT * 3), 3);
+iEarL.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAT_COUNT * 3), 3);
+iEarR.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAT_COUNT * 3), 3);
+iPawL.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAT_COUNT * 3), 3);
+iPawR.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAT_COUNT * 3), 3);
+iTail.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAT_COUNT * 3), 3);
+
+const _dummy = new THREE.Object3D();
+const _color = new THREE.Color();
+
+// Cat state array
 const chibiPeople = [];
 
-function createChibiPerson(x, z, colorSkin, colorShirt, colorPants) {
-  const group = new THREE.Group();
-  group.name = 'chibiPerson_' + Math.random().toString(36).substr(2,5);
+// Spawn cats
+for (let i = 0; i < CAT_COUNT; i++) {
+  let px, pz, tries = 0;
+  do {
+    const angle = Math.random() * Math.PI * 2;
+    const r = 14 + Math.random() * 48;
+    px = Math.cos(angle) * r;
+    pz = Math.sin(angle) * r;
+    tries++;
+  } while (
+    portfolioProjects.some(p => Math.hypot(px - p.position.x, pz - p.position.z) < 8)
+    || Math.hypot(px, pz) < 8
+    && tries < 20
+  );
 
-  // Cat colors
-  const catColors = [0xf5deb3, 0x888888, 0x333333, 0xff9966, 0xffffff, 0xc8a96e, 0x222222];
-  const catColor = catColors[Math.floor(Math.random() * catColors.length)];
-  const catMat = new THREE.MeshStandardMaterial({ color: catColor, roughness: 0.8 });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
-  const noseMat = new THREE.MeshStandardMaterial({ color: 0xff9999, roughness: 0.5 });
-  const innerEarMat = new THREE.MeshStandardMaterial({ color: 0xffcccc, roughness: 0.9 });
+  const colorIdx = Math.floor(Math.random() * CAT_COLORS.length);
+  _color.setHex(CAT_COLORS[colorIdx]);
 
-  // Body (chubby oval)
-  const bodyGeo = new THREE.SphereGeometry(0.22, 8, 6);
-  const body = new THREE.Mesh(bodyGeo, catMat);
-  body.position.y = 0.28;
-  body.scale.set(1, 0.9, 1);
-  body.castShadow = true;
-  group.add(body);
-
-  // Head (round, big)
-  const headGeo = new THREE.SphereGeometry(0.22, 8, 7);
-  const head = new THREE.Mesh(headGeo, catMat);
-  head.position.y = 0.68;
-  head.castShadow = true;
-  group.add(head);
-
-  // Ears (triangular — ConeGeometry)
-  [-0.12, 0.12].forEach((ex, ei) => {
-    const earGeo = new THREE.ConeGeometry(0.07, 0.14, 4);
-    const ear = new THREE.Mesh(earGeo, catMat);
-    ear.position.set(ex, 0.87, 0);
-    ear.rotation.z = ex < 0 ? -0.25 : 0.25;
-    group.add(ear);
-    // Inner ear pink
-    const iearGeo = new THREE.ConeGeometry(0.04, 0.09, 4);
-    const iear = new THREE.Mesh(iearGeo, innerEarMat);
-    iear.position.set(ex, 0.87, 0.01);
-    iear.rotation.z = ex < 0 ? -0.25 : 0.25;
-    group.add(iear);
+  // Set instance color for all body parts
+  [iBody, iHead, iEarL, iEarR, iPawL, iPawR, iTail].forEach(mesh => {
+    mesh.setColorAt(i, _color);
   });
-
-  // Eyes (small spheres)
-  [-0.09, 0.09].forEach(ex => {
-    const eGeo = new THREE.SphereGeometry(0.035, 6, 6);
-    const eye = new THREE.Mesh(eGeo, eyeMat);
-    eye.position.set(ex, 0.70, 0.20);
-    group.add(eye);
-  });
-
-  // Nose
-  const nGeo = new THREE.SphereGeometry(0.022, 5, 5);
-  const nose = new THREE.Mesh(nGeo, noseMat);
-  nose.position.set(0, 0.65, 0.215);
-  group.add(nose);
-
-  // Tail
-  const tailGeo = new THREE.CylinderGeometry(0.03, 0.015, 0.45, 6);
-  const tail = new THREE.Mesh(tailGeo, catMat);
-  tail.name = 'arm_0_' + group.name; // reuse arm slot for animation
-  tail.position.set(0.18, 0.22, -0.22);
-  tail.rotation.x = -0.8;
-  tail.rotation.z = 0.5;
-  group.add(tail);
-
-  // Front paws
-  [-0.12, 0.12].forEach((px, pi) => {
-    const pawGeo = new THREE.SphereGeometry(0.07, 6, 5);
-    const paw = new THREE.Mesh(pawGeo, catMat);
-    paw.name = 'leg_' + pi + '_' + group.name;
-    paw.position.set(px, 0.06, 0.12);
-    paw.scale.set(1, 0.6, 1.2);
-    paw.castShadow = true;
-    group.add(paw);
-  });
-
-  // Hind legs stub
-  const hindGeo = new THREE.SphereGeometry(0.08, 6, 5);
-  const hind = new THREE.Mesh(hindGeo, catMat);
-  hind.name = 'arm_1_' + group.name;
-  hind.position.set(0, 0.1, -0.18);
-  hind.scale.set(1.1, 0.7, 1);
-  group.add(hind);
-
-  group.position.set(x, 0, z);
-  group.rotation.y = Math.random() * Math.PI * 2;
-  scene.add(group);
-
-  // Walking state
-  const walkAngle = Math.random() * Math.PI * 2;
-  const walkRadius = 5 + Math.random() * 12;
-  const walkSpeed = 0.3 + Math.random() * 0.4;
-  const walkCenterX = x;
-  const walkCenterZ = z;
-  const phase = Math.random() * Math.PI * 2;
 
   chibiPeople.push({
-    group, walkAngle, walkRadius, walkSpeed, walkCenterX, walkCenterZ, phase,
-    // Pre-cache named children so animate loop doesn't iterate group.children every frame
-    _legL: group.children.find(c => c.name && c.name.startsWith('leg_0')),
-    _legR: group.children.find(c => c.name && c.name.startsWith('leg_1')),
-    _armL: group.children.find(c => c.name && c.name.startsWith('arm_0')),
-    _armR: group.children.find(c => c.name && c.name.startsWith('arm_1')),
-    // flee state
+    idx: i,
+    x: px, z: pz,
+    walkAngle: Math.random() * Math.PI * 2,
+    walkRadius: 5 + Math.random() * 12,
+    walkSpeed: 0.28 + Math.random() * 0.35,
+    walkCenterX: px,
+    walkCenterZ: pz,
+    phase: Math.random() * Math.PI * 2,
+    ry: Math.random() * Math.PI * 2, // heading
     fleeing: false,
     fleeVx: 0, fleeVz: 0,
     fleeTimer: 0,
-    scaredTimer: 0,   // arms-up scared pose duration
-    baseWalkSpeed: walkSpeed,
+    scaredTimer: 0,
+    baseWalkSpeed: 0.28 + Math.random() * 0.35,
   });
-  return group;
 }
 
-// --- Place chibi city in the outer ring (radius 75–95) and between project zones ---
-// Outer city ring
+// Flush instance colors
+[iBody, iHead, iEarL, iEarR, iPawL, iPawR, iTail].forEach(m => {
+  if (m.instanceColor) m.instanceColor.needsUpdate = true;
+});
+
+// Helper: set matrix for a cat part with local offset
+function _setCatPart(mesh, idx, catX, catY, catZ, catRY, lx, ly, lz, sx=1, sy=1, sz=1, rx=0, rz=0) {
+  _dummy.position.set(catX, catY, catZ);
+  _dummy.rotation.set(0, catRY, 0);
+  _dummy.updateMatrix();
+  // apply local offset in cat's local space
+  const localOffset = new THREE.Vector3(lx, ly, lz).applyEuler(new THREE.Euler(0, catRY, 0));
+  _dummy.position.addScaledVector(localOffset, 1);
+  _dummy.position.x += localOffset.x; // already applied above via applyEuler
+  // simpler: just set world position directly
+  _dummy.position.set(
+    catX + Math.cos(catRY) * lx - Math.sin(catRY) * lz,
+    catY + ly,
+    catZ + Math.sin(catRY) * lx + Math.cos(catRY) * lz
+  );
+  _dummy.rotation.set(rx, catRY, rz);
+  _dummy.scale.set(sx, sy, sz);
+  _dummy.updateMatrix();
+  mesh.setMatrixAt(idx, _dummy.matrix);
+}
 const cityRingPositions = [];
 const cityRingCount = 28;
 for (let i = 0; i < cityRingCount; i++) {
@@ -1175,23 +1183,6 @@ for (let i = 0; i < 25; i++) {
   createChibiTree(Math.cos(angle) * r, Math.sin(angle) * r, 0.8 + Math.random() * 0.5);
 }
 
-// --- Chibi people (scattered in city areas and near roads) ---
-const skinTones = [0xffcc99, 0xf5c593, 0xc68642, 0x8d5524, 0xffe0bd];
-for (let i = 0; i < 30; i++) {
-  const angle = Math.random() * Math.PI * 2;
-  const r = 12 + Math.random() * 60;
-  const px = Math.cos(angle) * r;
-  const pz = Math.sin(angle) * r;
-  let tooClose = false;
-  portfolioProjects.forEach(p => {
-    if (new THREE.Vector2(px - p.position.x, pz - p.position.z).length() < 7) tooClose = true;
-  });
-  if (new THREE.Vector2(px, pz).length() < 7) tooClose = true;
-  if (!tooClose) {
-    const skin = skinTones[Math.floor(Math.random() * skinTones.length)];
-    createChibiPerson(px, pz, skin, randPastel(), chibiPalette[Math.floor(Math.random()*chibiPalette.length)]);
-  }
-}
 
 // ============================================================
 // Ambient particles (floating light specks)
@@ -1891,6 +1882,9 @@ function updateSkidMarks(dt) {
   const sharpTurn  = turning > 0.032 && absSpeed > 0.18; // was 0.022 / 0.12 — tighter threshold
   const isDrifting = drifting && absSpeed > 0.04;
   const shouldSkid = hardBrake || sharpTurn || isDrifting;
+  // 🔊 Drift sound — chỉ play khi bắt đầu skid, không lặp liên tục
+  if (shouldSkid && !updateSkidMarks._wasSkidding) playSound('drift');
+  updateSkidMarks._wasSkidding = shouldSkid;
 
   // Heading vectors
   const fwdX = Math.sin(heading), fwdZ = Math.cos(heading);
@@ -2062,8 +2056,8 @@ function resolveCollider(collider, dt) {
 
     // Trigger object hit animation
     collider.hitTimer = 0.6;
-    // Direction of hit: angle from car to object
     collider.hitDir = Math.atan2(-cdz, -cdx);
+    playSound('hit'); // 🔊 âm thanh va chạm
 
     // Hard hit knocks lamp post permanently
     if (collider.type === 'lamp' && impact > 0.15) {
@@ -3095,6 +3089,187 @@ let activeProject = null;
 let panelFadeTimer = 0;
 const clock = new THREE.Clock();
 
+// ============================================================
+// 🌧️ WEATHER SYSTEM
+// ============================================================
+const WEATHERS = ['clear', 'rain', 'fog', 'storm'];
+let currentWeather = 'clear';
+let weatherTimer = 30 + Math.random() * 60; // đổi thời tiết sau 30-90s
+
+// Rain particles
+const RAIN_COUNT = 600;
+const rainGeo = new THREE.BufferGeometry();
+const rainPos = new Float32Array(RAIN_COUNT * 3);
+for (let i = 0; i < RAIN_COUNT; i++) {
+  rainPos[i*3]   = (Math.random()-0.5)*80;
+  rainPos[i*3+1] = Math.random()*30;
+  rainPos[i*3+2] = (Math.random()-0.5)*80;
+}
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+const rainMat = new THREE.PointsMaterial({ color: 0xaaccff, size: 0.18, transparent: true, opacity: 0.55, sizeAttenuation: true });
+const rainMesh = new THREE.Points(rainGeo, rainMat);
+rainMesh.visible = false;
+rainMesh.frustumCulled = false;
+scene.add(rainMesh);
+
+// Fog
+scene.fog = null;
+
+// Lightning flash overlay
+const lightningOverlay = document.createElement('div');
+lightningOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(200,220,255,0);pointer-events:none;z-index:999;transition:background 0.05s;';
+document.body.appendChild(lightningOverlay);
+let lightningTimer = 0;
+
+function setWeather(type) {
+  currentWeather = type;
+  rainMesh.visible = (type === 'rain' || type === 'storm');
+  rainMat.opacity  = type === 'storm' ? 0.75 : 0.55;
+
+  if (type === 'fog') {
+    scene.fog = new THREE.FogExp2(0x8899aa, 0.018);
+  } else if (type === 'storm') {
+    scene.fog = new THREE.FogExp2(0x445566, 0.012);
+  } else {
+    scene.fog = null;
+  }
+
+  // Toast notification
+  const toast = document.createElement('div');
+  const labels = { clear:'☀️ Trời quang', rain:'🌧️ Bắt đầu mưa', fog:'🌫️ Sương mù dày đặc', storm:'⛈️ Giông bão!' };
+  toast.textContent = labels[type] || type;
+  toast.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;padding:6px 18px;border-radius:20px;font-size:13px;z-index:500;pointer-events:none;transition:opacity 0.5s;';
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity='0'; setTimeout(()=>toast.remove(),500); }, 2500);
+}
+
+function updateWeather(dt) {
+  weatherTimer -= dt;
+  if (weatherTimer <= 0) {
+    const next = WEATHERS[Math.floor(Math.random() * WEATHERS.length)];
+    setWeather(next);
+    weatherTimer = 30 + Math.random() * 90;
+  }
+
+  if (currentWeather === 'rain' || currentWeather === 'storm') {
+    const rp = rainGeo.attributes.position.array;
+    const fallSpeed = currentWeather === 'storm' ? 18 : 10;
+    for (let i = 0; i < RAIN_COUNT; i++) {
+      rp[i*3+1] -= fallSpeed * dt;
+      if (rp[i*3+1] < 0) {
+        rp[i*3]   = (Math.random()-0.5)*80;
+        rp[i*3+1] = 28 + Math.random()*4;
+        rp[i*3+2] = (Math.random()-0.5)*80;
+      }
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+
+    // Lightning during storm
+    if (currentWeather === 'storm') {
+      lightningTimer -= dt;
+      if (lightningTimer <= 0) {
+        lightningOverlay.style.background = 'rgba(200,220,255,0.35)';
+        setTimeout(() => lightningOverlay.style.background = 'rgba(200,220,255,0)', 80);
+        lightningTimer = 3 + Math.random() * 7;
+      }
+    }
+  }
+}
+
+// ============================================================
+// 🎵 AUDIO SYSTEM (Web Audio API — không cần file)
+// ============================================================
+let audioCtx = null;
+let engineOscL = null, engineOscR = null, engineGain = null;
+let _audioStarted = false;
+
+function initAudio() {
+  if (_audioStarted) return;
+  _audioStarted = true;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Engine drone — 2 oscillators detuned slightly for richness
+    engineGain = audioCtx.createGain();
+    engineGain.gain.value = 0;
+    const lp = audioCtx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 400;
+    engineOscL = audioCtx.createOscillator();
+    engineOscR = audioCtx.createOscillator();
+    engineOscL.type = engineOscR.type = 'sawtooth';
+    engineOscL.frequency.value = 55;
+    engineOscR.frequency.value = 57;
+    engineOscL.connect(lp); engineOscR.connect(lp);
+    lp.connect(engineGain);
+    engineGain.connect(audioCtx.destination);
+    engineOscL.start(); engineOscR.start();
+  } catch(e) { console.warn('Audio init failed', e); }
+}
+
+// One-shot sound effects
+function playSound(type) {
+  if (!audioCtx) return;
+  try {
+    const g = audioCtx.createGain();
+    g.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+
+    if (type === 'drift') {
+      // Tyre squeal — white noise bandpass
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.4, audioCtx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random()*2-1;
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.8;
+      src.connect(bp); bp.connect(g);
+      g.gain.setValueAtTime(0.18, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      src.start(now);
+    } else if (type === 'hit') {
+      // Thud — low sine burst
+      const o = audioCtx.createOscillator();
+      o.type = 'sine'; o.frequency.setValueAtTime(120, now);
+      o.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+      o.connect(g);
+      g.gain.setValueAtTime(0.3, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      o.start(now); o.stop(now + 0.18);
+    } else if (type === 'rain') {
+      // Rain ambience tick
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * (1 - i/d.length);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(g);
+      g.gain.setValueAtTime(0.04, now);
+      src.start(now);
+    }
+  } catch(e) {}
+}
+
+function updateAudio(dt) {
+  if (!audioCtx || !engineGain) return;
+  const absSpeed = Math.abs(carState.speed);
+  const targetFreq = 50 + absSpeed * 280;
+  const targetGain = absSpeed > 0.01 ? 0.06 + absSpeed * 0.18 : 0;
+  engineOscL.frequency.setTargetAtTime(targetFreq,     audioCtx.currentTime, 0.08);
+  engineOscR.frequency.setTargetAtTime(targetFreq+2,   audioCtx.currentTime, 0.08);
+  engineGain.gain.setTargetAtTime(targetGain,          audioCtx.currentTime, 0.08);
+
+  // Rain ambience ticks
+  if ((currentWeather === 'rain' || currentWeather === 'storm') && Math.random() < dt * 12) {
+    playSound('rain');
+  }
+}
+
+// Start audio on first user interaction
+document.addEventListener('keydown', initAudio, { once: true });
+document.addEventListener('mousedown', initAudio, { once: true });
+document.addEventListener('touchstart', initAudio, { once: true });
+
 function updateCar(dt) {
   const forward = keys.w || keys.up;
   const backward = keys.s || keys.down;
@@ -3434,75 +3609,74 @@ function animate() {
   // Animate tree sway & lamp/tree hit effects (every frame for hit, throttled for idle)
   animateColliders(dt, elapsed);
 
-  // NPC updates — throttle to every 4th frame (smooth enough, saves CPU significantly)
+  // NPC updates — throttle to every 4th frame
   if (animate._fCnt % 4 === 0) {
-  // Animate chibi cats — walk in circles, bob, swing paws + flee from car
   const CAR_SCARE_RADIUS = 7.5;
-  const CAR_PANIC_RADIUS = 4.0;
-  const FLEE_SPEED       = 4.5;
-  const FLEE_DECAY       = 2.2;
-  // dt scaled for 4-frame throttle
+  const CAR_FLEE_SPEED   = 4.5;
   const npcDt = dt * 4;
+  let npcDirty = false;
 
-  chibiPeople.forEach((person) => {
-    const px = person.group.position.x;
-    const pz = person.group.position.z;
-    const cdx = px - carState.position.x;
-    const cdz = pz - carState.position.z;
+  chibiPeople.forEach((p) => {
+    const cdx = p.x - carState.position.x;
+    const cdz = p.z - carState.position.z;
     const carDist = Math.sqrt(cdx*cdx + cdz*cdz);
-    const carApproaching = Math.abs(carState.speed) > 0.04;
 
-    if (carDist < CAR_SCARE_RADIUS && carApproaching) {
+    if (carDist < CAR_SCARE_RADIUS && Math.abs(carState.speed) > 0.04) {
       const mag = carDist || 1;
-      const rnd = (Math.random() - 0.5) * 0.6;
-      person.fleeVx = (cdx/mag + rnd);
-      person.fleeVz = (cdz/mag + rnd);
-      const urgency = carDist < CAR_PANIC_RADIUS ? 1.0 : 0.6;
-      person.fleeing = true;
-      person.fleeTimer = FLEE_DECAY * urgency + 0.5;
-      person.scaredTimer = 0.35;
-      person.walkSpeed = person.baseWalkSpeed * 2.8 * urgency;
+      p.fleeVx = cdx/mag + (Math.random()-0.5)*0.6;
+      p.fleeVz = cdz/mag + (Math.random()-0.5)*0.6;
+      p.fleeing = true;
+      p.fleeTimer = 2.0;
+      p.walkSpeed = p.baseWalkSpeed * 2.8;
     }
 
-    if (person.fleeing) {
-      person.fleeTimer -= npcDt;
-      if (person.fleeTimer <= 0) {
-        person.fleeing = false;
-        person.walkSpeed = person.baseWalkSpeed;
-      }
-      const spd = FLEE_SPEED * Math.min(1, person.fleeTimer / 0.4);
-      person.group.position.x += person.fleeVx * spd * npcDt;
-      person.group.position.z += person.fleeVz * spd * npcDt;
-      person.group.rotation.y = -Math.atan2(person.fleeVx, person.fleeVz);
+    if (p.fleeing) {
+      p.fleeTimer -= npcDt;
+      if (p.fleeTimer <= 0) { p.fleeing = false; p.walkSpeed = p.baseWalkSpeed; }
+      p.x += p.fleeVx * CAR_FLEE_SPEED * npcDt;
+      p.z += p.fleeVz * CAR_FLEE_SPEED * npcDt;
+      p.ry = -Math.atan2(p.fleeVx, p.fleeVz);
     } else {
-      person.walkAngle += person.walkSpeed * npcDt;
-      person.group.position.x = person.walkCenterX + Math.cos(person.walkAngle) * person.walkRadius;
-      person.group.position.z = person.walkCenterZ + Math.sin(person.walkAngle) * person.walkRadius;
-      person.group.rotation.y = -person.walkAngle - Math.PI / 2;
+      p.walkAngle += p.walkSpeed * npcDt;
+      p.x = p.walkCenterX + Math.cos(p.walkAngle) * p.walkRadius;
+      p.z = p.walkCenterZ + Math.sin(p.walkAngle) * p.walkRadius;
+      p.ry = -p.walkAngle - Math.PI / 2;
     }
 
-    // Leg/arm swing using cached references — no children iteration
-    const swingFreq = person.fleeing ? 9 : 4;
-    const swingAmp  = person.fleeing ? 0.6 : 0.35;
-    const swing = Math.sin(elapsed * swingFreq + person.phase) * swingAmp;
+    // Paw swing
+    const freq = p.fleeing ? 9 : 4;
+    const amp  = p.fleeing ? 0.5 : 0.3;
+    const swing = Math.sin(elapsed * freq + p.phase) * amp;
+    const bob   = Math.abs(swing) * 0.04;
+    const i = p.idx, ry = p.ry, cx = p.x, cz = p.z;
 
-    if (person.scaredTimer > 0) {
-      person.scaredTimer -= npcDt;
-      if (person._legL) person._legL.rotation.x =  swing;
-      if (person._legR) person._legR.rotation.x = -swing;
-      if (person._armL) person._armL.rotation.z =  1.4;
-      if (person._armR) person._armR.rotation.z = -1.4;
-    } else {
-      if (person._legL) person._legL.rotation.x =  swing;
-      if (person._legR) person._legR.rotation.x = -swing;
-      if (person._armL) person._armL.rotation.z =  0.35 + swing * 0.4;
-      if (person._armR) person._armR.rotation.z = -(0.35 + swing * 0.4);
-    }
+    // Body
+    _setCatPart(iBody,  i, cx, bob+0.28, cz, ry, 0, 0, 0,  1, 0.9, 1);
+    // Head
+    _setCatPart(iHead,  i, cx, bob+0.68, cz, ry, 0, 0, 0);
+    // Ears
+    _setCatPart(iEarL,  i, cx, bob+0.87, cz, ry, -0.12, 0, 0, 1, 1, 1, 0, -0.25);
+    _setCatPart(iEarR,  i, cx, bob+0.87, cz, ry,  0.12, 0, 0, 1, 1, 1, 0,  0.25);
+    // Paws (bob with swing)
+    _setCatPart(iPawL,  i, cx, bob+0.06+swing*0.06, cz, ry, -0.12, 0,  0.12, 1, 0.6, 1.2);
+    _setCatPart(iPawR,  i, cx, bob+0.06-swing*0.06, cz, ry,  0.12, 0,  0.12, 1, 0.6, 1.2);
+    // Tail wag
+    _setCatPart(iTail,  i, cx, bob+0.22, cz, ry,  0.18, 0, -0.22, 1, 1, 1, -0.8+swing*0.3, 0.5);
+    // Eyes
+    _setCatPart(iEyeL,  i, cx, bob+0.70, cz, ry, -0.09, 0, 0.20);
+    _setCatPart(iEyeR,  i, cx, bob+0.70, cz, ry,  0.09, 0, 0.20);
+    // Nose
+    _setCatPart(iNose,  i, cx, bob+0.65, cz, ry, 0, 0, 0.215);
 
-    // Body bob — simplified
-    person.group.position.y = Math.abs(swing) * 0.04;
+    npcDirty = true;
   });
-  } // end fCnt % 4 throttle
+
+  if (npcDirty) {
+    [iBody,iHead,iEarL,iEarR,iPawL,iPawR,iTail,iEyeL,iEyeR,iNose].forEach(m => {
+      m.instanceMatrix.needsUpdate = true;
+    });
+  }
+  } // end NPC throttle
 
   // Particles drift — throttle to every 3rd frame
   if (animate._fCnt % 3 === 0) {
@@ -3522,6 +3696,10 @@ function animate() {
 
   // Minimap
   drawMinimap();
+
+  // Weather + Audio
+  updateWeather(dt);
+  updateAudio(dt);
 
   renderer.render(scene, camera);
 }
