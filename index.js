@@ -111,7 +111,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.35;
 const root = document.getElementById('root') ?? document.body;
@@ -1114,14 +1114,6 @@ for (let i = 0; i < CAT_COUNT; i++) {
 
 // Helper: set matrix for a cat part with local offset
 function _setCatPart(mesh, idx, catX, catY, catZ, catRY, lx, ly, lz, sx=1, sy=1, sz=1, rx=0, rz=0) {
-  _dummy.position.set(catX, catY, catZ);
-  _dummy.rotation.set(0, catRY, 0);
-  _dummy.updateMatrix();
-  // apply local offset in cat's local space
-  const localOffset = new THREE.Vector3(lx, ly, lz).applyEuler(new THREE.Euler(0, catRY, 0));
-  _dummy.position.addScaledVector(localOffset, 1);
-  _dummy.position.x += localOffset.x; // already applied above via applyEuler
-  // simpler: just set world position directly
   _dummy.position.set(
     catX + Math.cos(catRY) * lx - Math.sin(catRY) * lz,
     catY + ly,
@@ -3087,7 +3079,8 @@ const cameraLookTarget = new THREE.Vector3();
 // --- ANIMATION LOOP ---
 let activeProject = null;
 let panelFadeTimer = 0;
-const clock = new THREE.Clock();
+// Clock replacement (THREE.Clock deprecated in v0.183)
+const clock = { _prev: 0, getDelta() { const now = performance.now()/1000; const d = this._prev ? Math.min(now - this._prev, 0.05) : 0.016; this._prev = now; return d; } };
 
 // ============================================================
 // 🌧️ WEATHER SYSTEM
