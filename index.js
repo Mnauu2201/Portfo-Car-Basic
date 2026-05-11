@@ -3185,8 +3185,8 @@ function initAudio() {
   _audioStarted = true;
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume(); // Chrome requires explicit resume after user gesture
 
-    // Engine drone — 2 oscillators detuned slightly for richness
     engineGain = audioCtx.createGain();
     engineGain.gain.value = 0;
     const lp = audioCtx.createBiquadFilter();
